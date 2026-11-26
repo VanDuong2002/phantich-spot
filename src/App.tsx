@@ -20,6 +20,7 @@ import { EditorialLead } from './ui/EditorialLead';
 import { IndicatorMatrix } from './ui/IndicatorMatrix';
 import { Masthead } from './ui/Masthead';
 import { PriceChart } from './ui/PriceChart';
+import { SettingsDrawer } from './ui/SettingsDrawer';
 
 function EditorialSkeleton() {
   return (
@@ -169,6 +170,13 @@ export default function App() {
     [updateSettings],
   );
 
+  const handleSettingsChange = useCallback(
+    (next: SettingsSchema) => {
+      updateSettings(() => next);
+    },
+    [updateSettings],
+  );
+
   const handleToggleWatchlist = useCallback(
     (symbol: string) => {
       updateSettings((prev) => {
@@ -270,6 +278,13 @@ export default function App() {
           PhanTich Spot · Dữ liệu công khai từ Binance Spot API · Nội dung phân tích kỹ thuật tự động chỉ mang tính tham khảo, không phải khuyến nghị đầu tư tài chính.
         </footer>
       </div>
+
+      <SettingsDrawer
+        open={settingsOpen}
+        settings={settings}
+        onChange={handleSettingsChange}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   );
 }
