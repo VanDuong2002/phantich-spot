@@ -23,6 +23,28 @@ const TIMEFRAME_TABS: { tf: Timeframe; label: string }[] = [
   { tf: '1w', label: '1W' },
 ];
 
+export interface ChartPriceFormat {
+  type: 'price';
+  precision: number;
+  minMove: number;
+}
+
+/**
+ * Compute adaptive Lightweight Charts priceFormat precision & minMove
+ * so micro-cap and sub-dollar USDT pairs (e.g. PEPEUSDT, SHIBUSDT, DOGEUSDT)
+ * never collapse to 0.00 on the price axis or price lines.
+ */
+export function getChartPriceFormat(price: number): ChartPriceFormat {
+  if (!Number.isFinite(price) || price <= 0) {
+    return { type: 'price', precision: 2, minMove: 0.01 };
+  }
+  const abs = Math.abs(price);
+  if (abs < 0.0001) return { type: 'price', precision: 8, minMove: 1e-8 };
+  if (abs < 0.01) return { type: 'price', precision: 6, minMove: 1e-6 };
+  if (abs < 1) return { type: 'price', precision: 4, minMove: 1e-4 };
+  return { type: 'price', precision: 2, minMove: 0.01 };
+}
+
 function buildEmaLineData(
   candles: Candle[],
   period: number,
@@ -97,12 +119,16 @@ export function PriceChart({
       },
     });
 
+    const latestPrice = sortedCandles[sortedCandles.length - 1]?.close ?? report.currentPrice;
+    const priceFormat = getChartPriceFormat(latestPrice);
+
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#15803D',
       downColor: '#B91C1C',
       borderVisible: false,
       wickUpColor: '#15803D',
       wickDownColor: '#B91C1C',
+      priceFormat,
     });
 
     candleSeries.setData(
@@ -122,6 +148,7 @@ export function PriceChart({
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
+        priceFormat,
       });
       emaFastSeries.setData(buildEmaLineData(sortedCandles, emaPeriods.fast));
     }
@@ -133,6 +160,7 @@ export function PriceChart({
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
+        priceFormat,
       });
       emaMidSeries.setData(buildEmaLineData(sortedCandles, emaPeriods.mid));
     }
@@ -144,6 +172,7 @@ export function PriceChart({
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
+        priceFormat,
       });
       emaSlowSeries.setData(buildEmaLineData(sortedCandles, emaPeriods.slow));
     }
