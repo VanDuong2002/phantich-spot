@@ -23,7 +23,12 @@ export function analyzeCoin(data: MultiTimeframeData, mode: AnalysisMode): Analy
   };
 
   const score = computeCompositeScore(timeframes, mode.timeframeWeights);
+  const score1W = timeframes['1w'].score;
   const score1D = timeframes['1d'].score;
+
+  const bearishHigherTfs: ('1D' | '1W')[] = [];
+  if (score1D < -15) bearishHigherTfs.push('1D');
+  if (score1W < -15) bearishHigherTfs.push('1W');
 
   const currentPrice =
     Number.isFinite(data.ticker.lastPrice) && data.ticker.lastPrice > 0
@@ -42,7 +47,7 @@ export function analyzeCoin(data: MultiTimeframeData, mode: AnalysisMode): Analy
   let downgradedForRiskReward = false;
 
   if (score >= mode.buyThreshold) {
-    if (mode.requireHigherTfNotBearish && score1D < -15) {
+    if (mode.requireHigherTfNotBearish && bearishHigherTfs.length > 0) {
       verdict = 'DUNG_NGOAI';
       downgradedForHigherTf = true;
     } else if (candidatePlan.riskReward < mode.minRiskReward) {
@@ -74,6 +79,7 @@ export function analyzeCoin(data: MultiTimeframeData, mode: AnalysisMode): Analy
 
   const narrative = generateNarrative(baseReport, {
     downgradedForHigherTf,
+    bearishHigherTfs: downgradedForHigherTf ? bearishHigherTfs : undefined,
     downgradedForRiskReward,
     calculatedRiskReward: candidatePlan.riskReward,
     minRiskReward: mode.minRiskReward,

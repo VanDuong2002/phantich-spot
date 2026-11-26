@@ -1,14 +1,59 @@
 import type { AnalysisReport, TimeframeAnalysis } from '../types/market';
 import { formatPercent, formatPrice } from '../utils/format';
 
+export type HigherTimeframeLabel = '1D' | '1W';
+
 export interface NarrativeContext {
   downgradedForHigherTf?: boolean;
+  bearishHigherTfs?: HigherTimeframeLabel[];
   downgradedForRiskReward?: boolean;
   calculatedRiskReward?: number;
   minRiskReward?: number;
 }
 
 type NarrativeInput = Omit<AnalysisReport, 'headline' | 'summary' | 'reasons' | 'warnings'>;
+
+function resolveBearishHigherTfs(
+  report: NarrativeInput,
+  context?: NarrativeContext,
+): HigherTimeframeLabel[] {
+  if (context?.bearishHigherTfs && context.bearishHigherTfs.length > 0) {
+    return context.bearishHigherTfs;
+  }
+
+  const inferred: HigherTimeframeLabel[] = [];
+  if (report.timeframes['1d'].score < -15) inferred.push('1D');
+  if (report.timeframes['1w'].score < -15) inferred.push('1W');
+
+  if (context?.downgradedForHigherTf && inferred.length === 0) {
+    return ['1D'];
+  }
+
+  return inferred;
+}
+
+function formatHigherTfPhrase(tfs: HigherTimeframeLabel[]): string {
+  const has1D = tfs.includes('1D');
+  const has1W = tfs.includes('1W');
+  if (has1D && has1W) return 'khung lớn (1D và 1W)';
+  if (has1W) return 'khung tuần (1W)';
+  return 'khung ngày (1D)';
+}
+
+function formatHigherTfScoreSummary(
+  report: NarrativeInput,
+  tfs: HigherTimeframeLabel[],
+): string {
+  const has1D = tfs.includes('1D');
+  const has1W = tfs.includes('1W');
+  if (has1D && has1W) {
+    return `1D: ${report.timeframes['1d'].score.toFixed(1)}, 1W: ${report.timeframes['1w'].score.toFixed(1)} điểm`;
+  }
+  if (has1W) {
+    return `${report.timeframes['1w'].score.toFixed(1)} điểm`;
+  }
+  return `${report.timeframes['1d'].score.toFixed(1)} điểm`;
+}
 
 function formatPairLabel(symbol: string): string {
   if (symbol.endsWith('USDT') && symbol.length > 4) {
@@ -40,11 +85,13 @@ function buildHeadline(report: NarrativeInput, context?: NarrativeContext): stri
   }
 
   // DUNG_NGOAI variants
+  const bearishHigherTfs = resolveBearishHigherTfs(report, context);
   if (
     context?.downgradedForHigherTf ||
-    (timeframes['1d'].score < -15 && timeframes['4h'].score > 15)
+    (bearishHigherTfs.length > 0 && timeframes['4h'].score > 15)
   ) {
-    return `${pair} hồi phục ngắn hạn ngược xu hướng ngày (1D), tạm đứng ngoài để tránh bẫy tăng giá`;
+    const tfPhrase = formatHigherTfPhrase(bearishHigherTfs);
+    return `${pair} hồi phục ngắn hạn ngược xu hướng ${tfPhrase}, tạm đứng ngoài để tránh bẫy tăng giá`;
   }
 
   if (context?.downgradedForRiskReward) {
@@ -70,7 +117,8 @@ function buildSummary(report: NarrativeInput, context?: NarrativeContext): strin
   } else if (verdict === 'GIU') {
     s3 = `Xu hướng chưa đủ đột phá để mở mua mới nhưng vẫn giữ được nền giá tích cực trên hỗ trợ ${formatPrice(referenceLevels.nearestSupport)}, phù hợp tiếp tục nắm giữ và đặt mốc vô hiệu hóa tại ${formatPrice(referenceLevels.invalidationLevel)}.`;
   } else if (context?.downgradedForHigherTf) {
-    s3 = `Dù nhịp tăng ngắn hạn cải thiện điểm số, xu hướng giảm chủ đạo của khung ngày (1D) khiến tín hiệu được hạ cấp xuống Đứng ngoài; chỉ nên xem xét lại khi giá vượt vững kháng cự ${formatPrice(referenceLevels.nearestResistance)}.`;
+    const tfPhrase = formatHigherTfPhrase(resolveBearishHigherTfs(report, context));
+    s3 = `Dù nhịp tăng ngắn hạn cải thiện điểm số, xu hướng giảm chủ đạo của ${tfPhrase} khiến tín hiệu được hạ cấp xuống Đứng ngoài; chỉ nên xem xét lại khi giá vượt vững kháng cự ${formatPrice(referenceLevels.nearestResistance)}.`;
   } else if (context?.downgradedForRiskReward) {
     s3 = `Điểm xu hướng đạt ngưỡng tích cực nhưng biên lợi nhuận so với rủi ro chưa đáp ứng kỷ luật quản trị vốn, do đó hệ thống khuyến nghị chờ nhịp điều chỉnh về gần hỗ trợ ${formatPrice(referenceLevels.nearestSupport)}.`;
   } else {
@@ -146,7 +194,6 @@ function buildReasons(report: NarrativeInput): string[] {
 function buildWarnings(report: NarrativeInput, context?: NarrativeContext): string[] {
   const warnings: string[] = [];
   const tf1w = report.timeframes['1w'];
-  const tf1d = report.timeframes['1d'];
   const tf4h = report.timeframes['4h'];
 
   if (tf1w.snapshot.ema200 === null) {
@@ -155,13 +202,19 @@ function buildWarnings(report: NarrativeInput, context?: NarrativeContext): stri
     );
   }
 
+  const bearishHigherTfs = resolveBearishHigherTfs(report, context);
   if (context?.downgradedForHigherTf) {
+    const tfPhrase = formatHigherTfPhrase(bearishHigherTfs);
+    const capitalizedTfPhrase = tfPhrase.charAt(0).toUpperCase() + tfPhrase.slice(1);
+    const scoreText = formatHigherTfScoreSummary(report, bearishHigherTfs);
     warnings.push(
-      `Khung ngày (1D) đang giảm mạnh (${tf1d.score.toFixed(1)} điểm), tín hiệu bị hạ cấp từ Mua xuống Đứng ngoài để tránh giao dịch ngược xu hướng chính.`,
+      `${capitalizedTfPhrase} đang giảm mạnh (${scoreText}), tín hiệu bị hạ cấp từ Mua xuống Đứng ngoài để tránh giao dịch ngược xu hướng chính.`,
     );
-  } else if (tf1d.score < -15 && tf4h.score > 15) {
+  } else if (bearishHigherTfs.length > 0 && tf4h.score > 15) {
+    const tfPhrase = formatHigherTfPhrase(bearishHigherTfs);
+    const scoreText = formatHigherTfScoreSummary(report, bearishHigherTfs);
     warnings.push(
-      `Xu hướng khung ngày (1D) đang tiêu cực (${tf1d.score.toFixed(1)} điểm) trái chiều với nhịp hồi khung 4H, tiềm ẩn rủi ro bẫy tăng giá.`,
+      `Xu hướng ${tfPhrase} đang tiêu cực (${scoreText}) trái chiều với nhịp hồi khung 4H, tiềm ẩn rủi ro bẫy tăng giá.`,
     );
   }
 

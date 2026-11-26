@@ -109,6 +109,54 @@ describe('analyzeCoin', () => {
     expect(downgraded.warnings.some((w) => w.includes('1D'))).toBe(true);
   });
 
+  it('downgrades MUA to DUNG_NGOAI with 1W warning when 1W is strongly bearish while 1D/4H/1H are bullish', () => {
+    const modeWith1WGuard: AnalysisMode = {
+      ...balanced,
+      timeframeWeights: { '1w': 10, '1d': 30, '4h': 35, '1h': 25 },
+      buyThreshold: 60,
+      requireHigherTfNotBearish: true,
+    };
+    const dataBearish1W = makeData(
+      trendCandles(120000, -250, 220),
+      trendCandles(50000, 200, 240),
+      trendCandles(80000, 80, 240),
+      trendCandles(94000, 25, 240)
+    );
+    const report = analyzeCoin(dataBearish1W, modeWith1WGuard);
+    expect(report.timeframes['1w'].score).toBeLessThan(-15);
+    expect(report.timeframes['1d'].score).toBeGreaterThan(15);
+    expect(report.score).toBeGreaterThanOrEqual(modeWith1WGuard.buyThreshold);
+    expect(report.verdict).toBe('DUNG_NGOAI');
+    expect(report.tradePlan).toBeNull();
+    expect(report.headline).toContain('1W');
+    expect(report.summary).toContain('1W');
+    expect(report.warnings.some((w) => w.includes('1W'))).toBe(true);
+  });
+
+  it('cites both 1D và 1W when both higher timeframes trigger the bearish downgrade', () => {
+    const lowerTfHeavyMode: AnalysisMode = {
+      ...balanced,
+      timeframeWeights: { '1w': 5, '1d': 5, '4h': 50, '1h': 40 },
+      buyThreshold: 60,
+      requireHigherTfNotBearish: true,
+    };
+    const dataBearishBoth = makeData(
+      trendCandles(120000, -250, 220),
+      trendCandles(120000, -250, 240),
+      trendCandles(80000, 80, 240),
+      trendCandles(94000, 25, 240)
+    );
+    const report = analyzeCoin(dataBearishBoth, lowerTfHeavyMode);
+    expect(report.timeframes['1w'].score).toBeLessThan(-15);
+    expect(report.timeframes['1d'].score).toBeLessThan(-15);
+    expect(report.score).toBeGreaterThanOrEqual(lowerTfHeavyMode.buyThreshold);
+    expect(report.verdict).toBe('DUNG_NGOAI');
+    expect(report.tradePlan).toBeNull();
+    expect(report.headline).toContain('1D và 1W');
+    expect(report.summary).toContain('1D và 1W');
+    expect(report.warnings.some((w) => w.includes('1D và 1W'))).toBe(true);
+  });
+
   it('downgrades MUA to DUNG_NGOAI with warning when riskReward is below minRiskReward', () => {
     const strictRrMode: AnalysisMode = {
       ...balanced,
