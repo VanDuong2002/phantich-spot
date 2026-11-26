@@ -1,10 +1,15 @@
-import { RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Newspaper, Radar, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import type { AnalysisMode } from '../types/market';
 import { formatDateTimeVi } from '../utils/format';
+
+export type AppTab = 'detail' | 'scanner';
 
 export interface MastheadProps {
   modes: AnalysisMode[];
   activeModeId: string;
+  activeTab: AppTab;
+  scannerBuyCount?: number;
+  onSelectTab: (tab: AppTab) => void;
   onSelectMode: (modeId: string) => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
@@ -15,6 +20,9 @@ export interface MastheadProps {
 export function Masthead({
   modes,
   activeModeId,
+  activeTab,
+  scannerBuyCount = 0,
+  onSelectTab,
   onSelectMode,
   onRefresh,
   onOpenSettings,
@@ -79,6 +87,45 @@ export function Masthead({
           </button>
         </div>
       </div>
+
+      {/* Editorial Navigation Tabs */}
+      <nav
+        aria-label="Điều hướng chính"
+        className="mt-3 flex items-center gap-1 border-t border-[#D6D0C4] pt-2.5"
+      >
+        <button
+          type="button"
+          onClick={() => onSelectTab('detail')}
+          aria-current={activeTab === 'detail' ? 'page' : undefined}
+          className={`inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+            activeTab === 'detail'
+              ? 'border-[#1C1917] bg-[#1C1917] text-[#FAF7F0]'
+              : 'border-transparent bg-transparent text-[#57534E] hover:border-[#D6D0C4] hover:bg-[#F3EFE6] hover:text-[#1C1917]'
+          }`}
+        >
+          <Newspaper className="h-3.5 w-3.5" />
+          <span>Phân tích chi tiết</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectTab('scanner')}
+          aria-current={activeTab === 'scanner' ? 'page' : undefined}
+          className={`inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+            activeTab === 'scanner'
+              ? 'border-[#1C1917] bg-[#1C1917] text-[#FAF7F0]'
+              : 'border-transparent bg-transparent text-[#57534E] hover:border-[#D6D0C4] hover:bg-[#F3EFE6] hover:text-[#1C1917]'
+          }`}
+        >
+          <Radar className="h-3.5 w-3.5" />
+          <span>Quét coin nên mua</span>
+          {scannerBuyCount > 0 && (
+            <span className="ml-0.5 rounded-none bg-[#15803D] px-1.5 py-0.5 font-mono-tabular text-[10px] font-bold text-[#FAF7F0]">
+              {scannerBuyCount}
+            </span>
+          )}
+        </button>
+      </nav>
     </header>
   );
 }

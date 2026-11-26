@@ -19,6 +19,7 @@ const KLINE_TTL_MS: Record<Timeframe, number> = {
 };
 
 const TICKER_TTL_MS = 30_000;
+const ALL_TICKERS_TTL_MS = 60_000;
 const EXCHANGE_INFO_TTL_MS = 24 * 60 * 60 * 1000;
 
 const MULTI_TF_LIMITS: Record<Timeframe, number> = {
@@ -189,6 +190,49 @@ export async function fetchTicker24h(
       quoteVolume: Number(raw.quoteVolume),
     };
   });
+}
+
+/** Fetches 24h ticker statistics for all symbols with a 60s cache. */
+export async function fetchAllTickers24h(forceRefresh = false): Promise<Ticker24h[]> {
+  return getCached('ticker24h:all', ALL_TICKERS_TTL_MS, forceRefresh, async () => {
+    const rawList = await fetchJsonWithFallback<RawTicker24hResponse[]>('/api/v3/ticker/24hr');
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((raw) => ({
+      symbol: raw.symbol,
+      lastPrice: Number(raw.lastPrice),
+      priceChangePercent: Number(raw.priceChangePercent),
+      highPrice: Number(raw.highPrice),
+      lowPrice: Number(raw.lowPrice),
+      quoteVolume: Number(raw.quoteVolume),
+    }));
+  });
+}
+
+/**
+ * Fetches top N active Spot USDT pairs ranked by 24h quote volume,
+ * excluding specified base assets (e.g., stablecoins).
+ */
+export async function fetchTopUsdtSymbolsByVolume(
+  topN: number,
+  excludeBases: ReadonlySet<string> = new Set(),
+  forceRefresh = false,
+): Promise<Ticker24h[]> {
+  const [symbols, allTickers] = await Promise.all([
+    fetchUsdtSymbols(forceRefresh),
+    fetchAllTickers24h(forceRefresh),
+  ]);
+
+  const tradableMap = new Map<string, SymbolInfo>();
+  for (const sym of symbols) {
+    if (!excludeBases.has(sym.baseAsset.toUpperCase())) {
+      tradableMap.set(sym.symbol, sym);
+    }
+  }
+
+  return allTickers
+    .filter((t) => tradableMap.has(t.symbol) && Number.isFinite(t.quoteVolume) && t.quoteVolume > 0)
+    .sort((a, b) => b.quoteVolume - a.quoteVolume)
+    .slice(0, Math.max(1, topN));
 }
 
 /** Fetches 24h ticker and 1h/4h/1d/1w klines in parallel for a symbol. */

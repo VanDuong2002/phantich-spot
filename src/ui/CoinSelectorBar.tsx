@@ -166,7 +166,7 @@ export function CoinSelectorBar({
         </div>
 
         {/* Watchlist ticker tape */}
-        <div className="flex flex-1 items-center gap-2 overflow-x-auto pb-0.5 lg:justify-end">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5">
           {watchlist.map((sym) => {
             const ticker = tickers[sym];
             const isActive = sym === selectedSymbol;

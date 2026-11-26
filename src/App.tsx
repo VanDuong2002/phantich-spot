@@ -3,12 +3,20 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { analyzeCoin } from './engine/analyze';
 import { runQuickBacktest } from './engine/backtest';
 import {
+  runMarketScan,
+  STABLECOIN_BASES,
+  type ScanFilter,
+  type ScanProgress,
+} from './engine/scanner';
+import {
   fetchMultiTimeframeData,
   fetchTicker24h,
+  fetchTopUsdtSymbolsByVolume,
   fetchUsdtSymbols,
 } from './services/binance';
 import { loadSettings, saveSettings } from './settings/storage';
 import type {
+  AnalysisReport,
   MultiTimeframeData,
   SettingsSchema,
   SymbolInfo,
@@ -18,9 +26,17 @@ import { BacktestCard } from './ui/BacktestCard';
 import { CoinSelectorBar } from './ui/CoinSelectorBar';
 import { EditorialLead } from './ui/EditorialLead';
 import { IndicatorMatrix } from './ui/IndicatorMatrix';
-import { Masthead } from './ui/Masthead';
+import { Masthead, type AppTab } from './ui/Masthead';
+import { MarketScanner } from './ui/MarketScanner';
 import { PriceChart } from './ui/PriceChart';
 import { SettingsDrawer } from './ui/SettingsDrawer';
+
+function readScannerTopN(settings: SettingsSchema): number {
+  const scannerExt = settings.extensions?.scanner as { topN?: unknown } | undefined;
+  const n = scannerExt?.topN;
+  if (n === 20 || n === 30 || n === 50) return n;
+  return 30;
+}
 
 function EditorialSkeleton() {
   return (
@@ -56,6 +72,7 @@ function EditorialSkeleton() {
 
 export default function App() {
   const [settings, setSettings] = useState<SettingsSchema>(() => loadSettings());
+  const [activeTab, setActiveTab] = useState<AppTab>('detail');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState<string>(
     () => settings.watchlist[0] ?? 'BTCUSDT',
@@ -67,7 +84,17 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Market Scanner state
+  const [scanFilter, setScanFilter] = useState<ScanFilter>('ALL');
+  const [scanResults, setScanResults] = useState<AnalysisReport[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
   const requestSeqRef = useRef(0);
+  const scanAbortRef = useRef<AbortController | null>(null);
+
+  const scannerTopN = readScannerTopN(settings);
 
   const updateSettings = useCallback((updater: (prev: SettingsSchema) => SettingsSchema) => {
     setSettings((prev) => {
@@ -190,9 +217,103 @@ export default function App() {
     [updateSettings],
   );
 
+  const handleChangeScannerTopN = useCallback(
+    (topN: number) => {
+      updateSettings((prev) => ({
+        ...prev,
+        extensions: {
+          ...prev.extensions,
+          scanner: {
+            ...((prev.extensions?.scanner as Record<string, unknown> | undefined) ?? {}),
+            topN,
+          },
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
+  const handleStopScan = useCallback(() => {
+    scanAbortRef.current?.abort();
+    scanAbortRef.current = null;
+    setIsScanning(false);
+  }, []);
+
+  const handleStartScan = useCallback(async () => {
+    if (!activeMode) return;
+    scanAbortRef.current?.abort();
+    const controller = new AbortController();
+    scanAbortRef.current = controller;
+
+    setIsScanning(true);
+    setScanError(null);
+    setScanProgress({ completed: 0, total: scannerTopN, currentSymbol: '', failedCount: 0 });
+
+    try {
+      const topTickers = await fetchTopUsdtSymbolsByVolume(scannerTopN, STABLECOIN_BASES);
+      if (controller.signal.aborted) return;
+
+      const targetSymbols = topTickers.map((t) => t.symbol);
+      setScanProgress({
+        completed: 0,
+        total: targetSymbols.length,
+        currentSymbol: targetSymbols[0] ?? '',
+        failedCount: 0,
+      });
+
+      const finalResults = await runMarketScan(
+        targetSymbols,
+        activeMode,
+        (sym) => fetchMultiTimeframeData(sym, false),
+        {
+          concurrency: 5,
+          signal: controller.signal,
+          onProgress: (progress, partial) => {
+            setScanProgress(progress);
+            setScanResults(partial);
+          },
+        },
+      );
+
+      if (!controller.signal.aborted) {
+        setScanResults(finalResults);
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        const detail = err instanceof Error ? err.message : 'Lỗi kết nối không xác định';
+        setScanError(`Không thể tải danh sách quét từ Binance (${detail}). Vui lòng thử lại.`);
+      }
+    } finally {
+      if (scanAbortRef.current === controller) {
+        scanAbortRef.current = null;
+        setIsScanning(false);
+      }
+    }
+  }, [activeMode, scannerTopN]);
+
+  useEffect(() => {
+    return () => {
+      scanAbortRef.current?.abort();
+    };
+  }, []);
+
+  const handleSelectCoinFromScanner = useCallback((symbol: string) => {
+    setSelectedSymbol(symbol);
+    setActiveTab('detail');
+  }, []);
+
   const handleRefresh = useCallback(() => {
+    if (activeTab === 'scanner') {
+      void handleStartScan();
+      return;
+    }
     void loadMarketData(selectedSymbol, true);
-  }, [selectedSymbol, loadMarketData]);
+  }, [activeTab, handleStartScan, selectedSymbol, loadMarketData]);
+
+  const scannerBuyCount = useMemo(
+    () => scanResults.filter((r) => r.verdict === 'MUA').length,
+    [scanResults],
+  );
 
   const report = useMemo(() => {
     if (!marketData || !activeMode) return null;
@@ -217,62 +338,86 @@ export default function App() {
         <Masthead
           modes={settings.modes}
           activeModeId={settings.activeModeId}
+          activeTab={activeTab}
+          scannerBuyCount={scannerBuyCount}
+          onSelectTab={setActiveTab}
           onSelectMode={handleSelectMode}
           onRefresh={handleRefresh}
           onOpenSettings={() => setSettingsOpen(true)}
           fetchedAt={marketData?.fetchedAt ?? null}
-          isRefreshing={isRefreshing}
+          isRefreshing={activeTab === 'scanner' ? isScanning : isRefreshing}
         />
 
-        <CoinSelectorBar
-          selectedSymbol={selectedSymbol}
-          symbols={symbols}
-          watchlist={settings.watchlist}
-          tickers={tickers}
-          onSelectSymbol={setSelectedSymbol}
-          onToggleWatchlist={handleToggleWatchlist}
-        />
+        {activeTab === 'detail' ? (
+          <>
+            <CoinSelectorBar
+              selectedSymbol={selectedSymbol}
+              symbols={symbols}
+              watchlist={settings.watchlist}
+              tickers={tickers}
+              onSelectSymbol={setSelectedSymbol}
+              onToggleWatchlist={handleToggleWatchlist}
+            />
 
-        {error && (
-          <div
-            role="alert"
-            className="mt-4 flex flex-col gap-3 border border-[#B91C1C] border-l-4 bg-[#F3EFE6] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="flex items-start gap-2.5 text-sm text-[#1C1917]">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#B91C1C]" />
-              <span>{error}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => void loadMarketData(selectedSymbol, true)}
-              className="inline-flex shrink-0 items-center gap-1.5 border border-[#B91C1C] bg-[#B91C1C] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#FAF7F0] transition-opacity hover:opacity-90 cursor-pointer"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Thử lại</span>
-            </button>
-          </div>
+            {error && (
+              <div
+                role="alert"
+                className="mt-4 flex flex-col gap-3 border border-[#B91C1C] border-l-4 bg-[#F3EFE6] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-start gap-2.5 text-sm text-[#1C1917]">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#B91C1C]" />
+                  <span>{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadMarketData(selectedSymbol, true)}
+                  className="inline-flex shrink-0 items-center gap-1.5 border border-[#B91C1C] bg-[#B91C1C] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#FAF7F0] transition-opacity hover:opacity-90 cursor-pointer"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Thử lại</span>
+                </button>
+              </div>
+            )}
+
+            <main>
+              {loading && (!marketData || marketData.symbol !== selectedSymbol) ? (
+                <EditorialSkeleton />
+              ) : report && marketData && backtest ? (
+                <>
+                  <EditorialLead report={report} />
+                  <PriceChart
+                    candlesByTf={marketData.candles}
+                    report={report}
+                    emaPeriods={{
+                      fast: activeMode.params.emaFast,
+                      mid: activeMode.params.emaMid,
+                      slow: activeMode.params.emaSlow,
+                    }}
+                  />
+                  <IndicatorMatrix timeframes={report.timeframes} />
+                  <BacktestCard result={backtest} modeName={activeMode.name} />
+                </>
+              ) : null}
+            </main>
+          </>
+        ) : (
+          <main>
+            <MarketScanner
+              activeMode={activeMode}
+              topN={scannerTopN}
+              onChangeTopN={handleChangeScannerTopN}
+              filter={scanFilter}
+              onChangeFilter={setScanFilter}
+              results={scanResults}
+              isScanning={isScanning}
+              progress={scanProgress}
+              error={scanError}
+              onStartScan={() => void handleStartScan()}
+              onStopScan={handleStopScan}
+              onSelectCoin={handleSelectCoinFromScanner}
+            />
+          </main>
         )}
-
-        <main>
-          {loading && (!marketData || marketData.symbol !== selectedSymbol) ? (
-            <EditorialSkeleton />
-          ) : report && marketData && backtest ? (
-            <>
-              <EditorialLead report={report} />
-              <PriceChart
-                candlesByTf={marketData.candles}
-                report={report}
-                emaPeriods={{
-                  fast: activeMode.params.emaFast,
-                  mid: activeMode.params.emaMid,
-                  slow: activeMode.params.emaSlow,
-                }}
-              />
-              <IndicatorMatrix timeframes={report.timeframes} />
-              <BacktestCard result={backtest} modeName={activeMode.name} />
-            </>
-          ) : null}
-        </main>
 
         <footer className="editorial-double-top mt-4 pt-3 pb-6 text-center text-[11px] text-[#57534E]">
           PhanTich Spot · Dữ liệu công khai từ Binance Spot API · Nội dung phân tích kỹ thuật tự động chỉ mang tính tham khảo, không phải khuyến nghị đầu tư tài chính.

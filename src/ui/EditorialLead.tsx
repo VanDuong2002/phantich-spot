@@ -131,7 +131,7 @@ export function EditorialLead({ report }: EditorialLeadProps) {
         </article>
 
         {/* Right Column (5/12): Spot Trade Plan OR Reference Levels + 4-TF Summary */}
-        <aside className="flex flex-col justify-between gap-5 lg:col-span-5 lg:pl-7">
+        <aside className="flex flex-col justify-start gap-5 lg:col-span-5 lg:pl-7">
           <div className="border border-[#D6D0C4] bg-[#F3EFE6] p-4 sm:p-5">
             {/* Box Header with Composite Score */}
             <div className="flex items-baseline justify-between border-b border-[#D6D0C4] pb-3">

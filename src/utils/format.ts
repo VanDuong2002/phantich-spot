@@ -16,7 +16,7 @@ const subDollarFormatter = new Intl.NumberFormat('en-US', {
 const microFormatter = new Intl.NumberFormat('en-US', {
   useGrouping: false,
   minimumSignificantDigits: 2,
-  maximumSignificantDigits: 8,
+  maximumSignificantDigits: 4,
 });
 
 /**
