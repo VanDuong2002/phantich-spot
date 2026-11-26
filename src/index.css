@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #FAF7F0;
+  --color-surface: #F3EFE6;
+  --color-ink: #1C1917;
+  --color-muted: #57534E;
+  --color-rule: #D6D0C4;
+  --color-buy: #15803D;
+  --color-sell: #B91C1C;
+  --color-hold: #B45309;
+  --color-wait: #475569;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: #FAF7F0;
+    color: #1C1917;
+    font-family: 'Be Vietnam Pro', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: #1C1917;
+    color: #FAF7F0;
+  }
+}
+
+.font-serif-editorial {
+  font-family: 'Lora', Georgia, 'Times New Roman', serif;
+}
+
+.font-sans-editorial {
+  font-family: 'Be Vietnam Pro', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.font-mono-tabular {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.editorial-double-top {
+  border-top: 4px double #1C1917;
+}
+
+.editorial-double-bottom {
+  border-bottom: 4px double #1C1917;
+}
+
+.editorial-rule {
+  border-color: #D6D0C4;
+}
