@@ -196,4 +196,78 @@ describe('SettingsDrawer', () => {
     expect(onChange.mock.calls[0][0].activeModeId).toBe('balanced');
     expect(onChange.mock.calls[0][0].modes.length).toBe(3);
   });
+
+  it('allows intermediate keystrokes in NumericField and recovers on blur when invalid', () => {
+    const onChange = vi.fn();
+    render(
+      <SettingsDrawer
+        open={true}
+        settings={createDefaultSettings()}
+        onChange={onChange}
+        onClose={() => {}}
+      />,
+    );
+
+    const rsiOverboughtInput = screen.getByLabelText('RSI quá mua') as HTMLInputElement;
+    expect(rsiOverboughtInput.value).toBe('70');
+
+    // Clear input -> should stay empty in DOM without committing invalid value
+    fireEvent.change(rsiOverboughtInput, { target: { value: '' } });
+    expect(rsiOverboughtInput.value).toBe('');
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Type first digit "7" (below min 51) -> should stay "7" in DOM without committing
+    fireEvent.change(rsiOverboughtInput, { target: { value: '7' } });
+    expect(rsiOverboughtInput.value).toBe('7');
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Blur while invalid -> recovers to last valid value "70"
+    fireEvent.blur(rsiOverboughtInput);
+    expect(rsiOverboughtInput.value).toBe('70');
+
+    // Now type "7" then "75" -> commits 75
+    fireEvent.change(rsiOverboughtInput, { target: { value: '7' } });
+    expect(rsiOverboughtInput.value).toBe('7');
+    fireEvent.change(rsiOverboughtInput, { target: { value: '75' } });
+    expect(rsiOverboughtInput.value).toBe('75');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const updatedMode = onChange.mock.calls[0][0].modes.find(
+      (m: { id: string }) => m.id === 'balanced',
+    );
+    expect(updatedMode.params.rsiOverbought).toBe(75);
+  });
+
+  it('allows clearing mode name to retype and restores previous name on blur if left blank', () => {
+    const onChange = vi.fn();
+    render(
+      <SettingsDrawer
+        open={true}
+        settings={createDefaultSettings()}
+        onChange={onChange}
+        onClose={() => {}}
+      />,
+    );
+
+    const nameInput = screen.getByLabelText('Tên chế độ') as HTMLInputElement;
+    expect(nameInput.value).toBe('Cân bằng');
+
+    // Clear name -> stays empty in DOM, does not commit blank
+    fireEvent.change(nameInput, { target: { value: '' } });
+    expect(nameInput.value).toBe('');
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Blur while blank -> restores previous valid name
+    fireEvent.blur(nameInput);
+    expect(nameInput.value).toBe('Cân bằng');
+
+    // Clear and type a new name -> commits trimmed name
+    fireEvent.change(nameInput, { target: { value: '' } });
+    fireEvent.change(nameInput, { target: { value: 'Chiến lược Spot 4H' } });
+    expect(nameInput.value).toBe('Chiến lược Spot 4H');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const updatedMode = onChange.mock.calls[0][0].modes.find(
+      (m: { id: string }) => m.id === 'balanced',
+    );
+    expect(updatedMode.name).toBe('Chiến lược Spot 4H');
+  });
 });

@@ -110,6 +110,15 @@ function NumericField({
   onValidChange: (val: number) => void;
 }) {
   const id = useId();
+  const [draft, setDraft] = useState<string>(() => String(value));
+
+  useEffect(() => {
+    setDraft((prev) => {
+      const parsedPrev = parseGuardedNumber(prev, min, max, integer);
+      return parsedPrev === value ? prev : String(value);
+    });
+  }, [value, min, max, integer]);
+
   return (
     <div className="flex flex-col gap-1">
       <label
@@ -125,12 +134,17 @@ function NumericField({
           min={min}
           max={max}
           step={step}
-          value={value}
+          value={draft}
           onChange={(e) => {
-            const next = parseGuardedNumber(e.target.value, min, max, integer);
+            const raw = e.target.value;
+            setDraft(raw);
+            const next = parseGuardedNumber(raw, min, max, integer);
             if (next !== null) {
               onValidChange(next);
             }
+          }}
+          onBlur={() => {
+            setDraft(String(value));
           }}
           className="font-mono-tabular w-full border border-[#D6D0C4] bg-[#FAF7F0] px-2.5 py-1.5 text-sm text-[#1C1917] focus:border-[#1C1917] focus:outline-none"
         />
@@ -159,6 +173,19 @@ export function SettingsDrawer({
 
   const activeMode =
     settings.modes.find((m) => m.id === settings.activeModeId) ?? settings.modes[0];
+
+  const [nameDraft, setNameDraft] = useState<string>(() => activeMode?.name ?? '');
+  const prevModeIdRef = useRef<string | undefined>(activeMode?.id);
+
+  useEffect(() => {
+    if (!activeMode) return;
+    if (prevModeIdRef.current !== activeMode.id) {
+      prevModeIdRef.current = activeMode.id;
+      setNameDraft(activeMode.name);
+      return;
+    }
+    setNameDraft((prev) => (prev.trim() === activeMode.name ? prev : activeMode.name));
+  }, [activeMode?.id, activeMode?.name]);
 
   useEffect(() => {
     if (!open) return;
@@ -410,11 +437,19 @@ export function SettingsDrawer({
                       <input
                         id="mode-name-input"
                         type="text"
-                        value={activeMode.name}
+                        value={nameDraft}
                         onChange={(e) => {
                           const nextName = e.target.value;
+                          setNameDraft(nextName);
                           if (nextName.trim().length > 0) {
-                            updateActiveMode((m) => ({ ...m, name: nextName }));
+                            updateActiveMode((m) => ({ ...m, name: nextName.trim() }));
+                          }
+                        }}
+                        onBlur={() => {
+                          if (nameDraft.trim().length === 0) {
+                            setNameDraft(activeMode.name);
+                          } else {
+                            setNameDraft(nameDraft.trim());
                           }
                         }}
                         className="mt-1 w-full border border-[#D6D0C4] bg-[#FAF7F0] px-2.5 py-1.5 text-sm font-medium text-[#1C1917] focus:border-[#1C1917] focus:outline-none"
