@@ -92,7 +92,12 @@ export function CoinNewsStrip({
                   <span>{item.title}</span>
                   <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-[#57534E]" />
                 </a>
-                <p className="mt-1 text-[11px] text-[#57534E]">{item.reasonVi}</p>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-[#1C1917]">
+                  <strong>Ý nghĩa:</strong> {item.meaningVi}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-[#57534E]">
+                  <strong>Ảnh hưởng:</strong> {item.impactVi}
+                </p>
               </article>
             );
           })}

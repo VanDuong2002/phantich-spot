@@ -13,6 +13,8 @@ export type NewsCategory =
 
 export type NewsFilter = 'ALL' | 'SELECTED_COIN' | 'FED_MACRO' | 'BULLISH' | 'BEARISH';
 
+export type NewsTimeRange = 'ALL' | '24H' | '3D' | 'PINNED';
+
 export interface RawNewsItem {
   id: string;
   title: string;
@@ -30,6 +32,18 @@ export interface AnalyzedNewsItem extends RawNewsItem {
   categoryLabelVi: string;
   coins: string[]; // Base assets e.g. ['BTC', 'ETH']
   reasonVi: string;
+  meaningVi: string;
+  impactVi: string;
+  horizonVi: string;
+  actionHintVi: string;
+}
+
+export interface DailyNewsDigest {
+  dateKey: string; // dd/MM
+  total: number;
+  bullish: number;
+  bearish: number;
+  neutral: number;
 }
 
 export interface NewsMarketSummary {

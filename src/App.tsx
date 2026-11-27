@@ -16,6 +16,12 @@ import {
   fetchUsdtSymbols,
 } from './services/binance';
 import { fetchNewsBundle } from './services/news';
+import {
+  loadNewsArchive,
+  mergeNewsIntoArchive,
+  togglePinInArchive,
+  type NewsArchiveState,
+} from './settings/newsArchive';
 import { loadSettings, saveSettings } from './settings/storage';
 import type {
   AnalysisReport,
@@ -98,7 +104,8 @@ export default function App() {
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
 
-  // News & FED Calendar state
+  // News & FED Calendar state (merged into persistent 7-day archive)
+  const [newsArchive, setNewsArchive] = useState<NewsArchiveState>(() => loadNewsArchive());
   const [newsBundle, setNewsBundle] = useState<NewsBundle | null>(null);
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState<string | null>(null);
@@ -321,6 +328,7 @@ export default function App() {
     try {
       const bundle = await fetchNewsBundle();
       setNewsBundle(bundle);
+      setNewsArchive((prev) => mergeNewsIntoArchive(prev, bundle.rawNews));
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Lỗi kết nối';
       setNewsError(`Không thể tải bản tin thị trường (${detail}). Vui lòng thử lại.`);
@@ -338,10 +346,13 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [loadNews]);
 
+  const handleTogglePinNews = useCallback((newsId: string) => {
+    setNewsArchive((prev) => togglePinInArchive(prev, newsId));
+  }, []);
+
   const analyzedNews = useMemo(() => {
-    if (!newsBundle) return [];
-    return analyzeNewsFeed(newsBundle.rawNews).items;
-  }, [newsBundle]);
+    return analyzeNewsFeed(newsArchive.items).items;
+  }, [newsArchive.items]);
 
   const upcomingRedEventCount = useMemo(() => {
     if (!newsBundle) return 0;
@@ -500,6 +511,8 @@ export default function App() {
               key={newsInitialFilter}
               selectedSymbol={selectedSymbol}
               items={analyzedNews}
+              pinnedIds={newsArchive.pinnedIds}
+              onTogglePin={handleTogglePinNews}
               calendar={newsBundle?.calendar ?? []}
               fearGreed={newsBundle?.fearGreed ?? null}
               fetchedAt={newsBundle?.fetchedAt ?? null}

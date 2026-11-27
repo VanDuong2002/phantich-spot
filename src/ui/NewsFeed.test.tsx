@@ -18,6 +18,10 @@ const sampleNews: AnalyzedNewsItem[] = [
     categoryLabelVi: 'ETF & Tổ chức',
     coins: ['BTC'],
     reasonVi: 'Dòng tiền tổ chức / ETF mua ròng',
+    meaningVi: 'Các quỹ tổ chức / quỹ Spot ETF ghi nhận dòng tiền mua ròng BTC.',
+    impactVi: 'Lực mua từ tổ chức trực tiếp hút nguồn cung lưu thông trên sàn.',
+    horizonVi: 'Trung hạn (1D–1W)',
+    actionHintVi: 'Củng cố độ tin cậy cho tín hiệu MUA kỹ thuật.',
   },
   {
     id: 'n2',
@@ -33,6 +37,10 @@ const sampleNews: AnalyzedNewsItem[] = [
     categoryLabelVi: 'FED & Vĩ mô',
     coins: [],
     reasonVi: 'Áp lực vĩ mô / lãi suất diều hâu',
+    meaningVi: 'Tín hiệu vĩ mô / FED mang sắc thái diều hâu.',
+    impactVi: 'Lợi suất trái phiếu Mỹ và DXY có xu hướng tăng, tạo áp lực bán.',
+    horizonVi: 'Ngắn & Trung hạn',
+    actionHintVi: 'Thận trọng rủi ro rung lắc mạnh.',
   },
 ];
 
@@ -58,6 +66,8 @@ describe('NewsFeed', () => {
       <NewsFeed
         selectedSymbol="BTCUSDT"
         items={sampleNews}
+        pinnedIds={['n1']}
+        onTogglePin={() => {}}
         calendar={sampleCalendar}
         fearGreed={{ value: 62, classification: 'Greed', classificationVi: 'Tham lam', updatedAt: Date.now() }}
         fetchedAt={Date.now()}
@@ -70,6 +80,7 @@ describe('NewsFeed', () => {
 
     expect(screen.getByText('FOMC Statement & Federal Funds Rate Decision')).toBeTruthy();
     expect(screen.getByText('TIN ĐỎ')).toBeTruthy();
+    expect(screen.getByText(/Lực mua từ tổ chức trực tiếp hút nguồn cung/)).toBeTruthy();
 
     fireEvent.click(screen.getByText('Liên quan BTC'));
     expect(screen.getByText('BlackRock Bitcoin ETF logs record inflow')).toBeTruthy();

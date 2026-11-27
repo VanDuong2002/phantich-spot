@@ -59,7 +59,7 @@ describe('newsAnalyzer', () => {
     ]);
   });
 
-  it('classifies bullish ETF inflow and bearish hawkish FED news accurately', () => {
+  it('classifies bullish ETF inflow and bearish hawkish FED news with deep Vietnamese meaning and impact', () => {
     const { items } = analyzeNewsFeed(sampleItems);
     const btcEtf = items.find((i) => i.id === '2')!;
     const fed = items.find((i) => i.id === '3')!;
@@ -67,10 +67,28 @@ describe('newsAnalyzer', () => {
     expect(btcEtf.sentiment).toBe('BULLISH');
     expect(btcEtf.category).toBe('ETF_INSTITUTIONAL');
     expect(btcEtf.coins).toContain('BTC');
+    expect(btcEtf.meaningVi).toContain('$850M');
+    expect(btcEtf.impactVi.length).toBeGreaterThan(20);
+    expect(btcEtf.actionHintVi.length).toBeGreaterThan(10);
 
     expect(fed.sentiment).toBe('BEARISH');
     expect(fed.category).toBe('FED_MACRO');
     expect(fed.impact).toBe('HIGH');
+    expect(fed.impactVi).toContain('DXY');
+  });
+
+  it('filters out TradingView user chart ideas as non-news noise', () => {
+    const { items } = analyzeNewsFeed([
+      {
+        id: 'tv1',
+        title: 'BTCUSDT - BULLISH BREAKOUT POTENTIAL',
+        description: 'Chart idea',
+        link: 'https://tradingview.com/chart/1',
+        source: 'TradingView Crypto Ideas',
+        publishedAt: now,
+      },
+    ]);
+    expect(items).toHaveLength(0);
   });
 
   it('filters by SELECTED_COIN, FED_MACRO, BULLISH, BEARISH, and search query', () => {

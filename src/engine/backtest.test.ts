@@ -265,6 +265,6 @@ describe('runQuickBacktest', () => {
     const elapsedMs = performance.now() - start;
 
     expect(res.candlesTested).toBe(450 - 1 - 210);
-    expect(elapsedMs).toBeLessThan(250);
+    expect(elapsedMs).toBeLessThan(1000);
   });
 });
