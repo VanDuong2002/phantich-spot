@@ -1,14 +1,15 @@
-import { Newspaper, Radar, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { CalendarClock, Newspaper, Radar, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import type { AnalysisMode } from '../types/market';
 import { formatDateTimeVi } from '../utils/format';
 
-export type AppTab = 'detail' | 'scanner';
+export type AppTab = 'detail' | 'scanner' | 'news';
 
 export interface MastheadProps {
   modes: AnalysisMode[];
   activeModeId: string;
   activeTab: AppTab;
   scannerBuyCount?: number;
+  upcomingRedEventCount?: number;
   onSelectTab: (tab: AppTab) => void;
   onSelectMode: (modeId: string) => void;
   onRefresh: () => void;
@@ -22,6 +23,7 @@ export function Masthead({
   activeModeId,
   activeTab,
   scannerBuyCount = 0,
+  upcomingRedEventCount = 0,
   onSelectTab,
   onSelectMode,
   onRefresh,
@@ -91,7 +93,7 @@ export function Masthead({
       {/* Editorial Navigation Tabs */}
       <nav
         aria-label="Điều hướng chính"
-        className="mt-3 flex items-center gap-1 border-t border-[#D6D0C4] pt-2.5"
+        className="mt-3 flex flex-wrap items-center gap-1 border-t border-[#D6D0C4] pt-2.5"
       >
         <button
           type="button"
@@ -122,6 +124,28 @@ export function Masthead({
           {scannerBuyCount > 0 && (
             <span className="ml-0.5 rounded-none bg-[#15803D] px-1.5 py-0.5 font-mono-tabular text-[10px] font-bold text-[#FAF7F0]">
               {scannerBuyCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectTab('news')}
+          aria-current={activeTab === 'news' ? 'page' : undefined}
+          className={`inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+            activeTab === 'news'
+              ? 'border-[#1C1917] bg-[#1C1917] text-[#FAF7F0]'
+              : 'border-transparent bg-transparent text-[#57534E] hover:border-[#D6D0C4] hover:bg-[#F3EFE6] hover:text-[#1C1917]'
+          }`}
+        >
+          <CalendarClock className="h-3.5 w-3.5" />
+          <span>Tin tức &amp; Lịch FED</span>
+          {upcomingRedEventCount > 0 && (
+            <span
+              title={`${upcomingRedEventCount} tin đỏ USD sắp công bố`}
+              className="ml-0.5 rounded-none bg-[#B91C1C] px-1.5 py-0.5 font-mono-tabular text-[10px] font-bold text-[#FAF7F0]"
+            >
+              {upcomingRedEventCount}
             </span>
           )}
         </button>

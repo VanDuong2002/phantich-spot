@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { analyzeCoin } from './engine/analyze';
 import { runQuickBacktest } from './engine/backtest';
+import { analyzeNewsFeed } from './engine/newsAnalyzer';
 import {
   runMarketScan,
   STABLECOIN_BASES,
@@ -14,6 +15,7 @@ import {
   fetchTopUsdtSymbolsByVolume,
   fetchUsdtSymbols,
 } from './services/binance';
+import { fetchNewsBundle } from './services/news';
 import { loadSettings, saveSettings } from './settings/storage';
 import type {
   AnalysisReport,
@@ -22,14 +24,19 @@ import type {
   SymbolInfo,
   Ticker24h,
 } from './types/market';
+import type { NewsBundle, NewsFilter } from './types/news';
 import { BacktestCard } from './ui/BacktestCard';
+import { CoinNewsStrip } from './ui/CoinNewsStrip';
 import { CoinSelectorBar } from './ui/CoinSelectorBar';
 import { EditorialLead } from './ui/EditorialLead';
 import { IndicatorMatrix } from './ui/IndicatorMatrix';
 import { Masthead, type AppTab } from './ui/Masthead';
 import { MarketScanner } from './ui/MarketScanner';
+import { NewsFeed } from './ui/NewsFeed';
 import { PriceChart } from './ui/PriceChart';
 import { SettingsDrawer } from './ui/SettingsDrawer';
+
+const NEWS_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
 
 function readScannerTopN(settings: SettingsSchema): number {
   const scannerExt = settings.extensions?.scanner as { topN?: unknown } | undefined;
@@ -90,6 +97,12 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+
+  // News & FED Calendar state
+  const [newsBundle, setNewsBundle] = useState<NewsBundle | null>(null);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState<string | null>(null);
+  const [newsInitialFilter, setNewsInitialFilter] = useState<NewsFilter>('ALL');
 
   const requestSeqRef = useRef(0);
   const scanAbortRef = useRef<AbortController | null>(null);
@@ -302,13 +315,58 @@ export default function App() {
     setActiveTab('detail');
   }, []);
 
+  const loadNews = useCallback(async () => {
+    setNewsLoading(true);
+    setNewsError(null);
+    try {
+      const bundle = await fetchNewsBundle();
+      setNewsBundle(bundle);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Lỗi kết nối';
+      setNewsError(`Không thể tải bản tin thị trường (${detail}). Vui lòng thử lại.`);
+    } finally {
+      setNewsLoading(false);
+    }
+  }, []);
+
+  // Load news on mount and auto-refresh every 3 minutes
+  useEffect(() => {
+    void loadNews();
+    const timer = window.setInterval(() => {
+      void loadNews();
+    }, NEWS_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [loadNews]);
+
+  const analyzedNews = useMemo(() => {
+    if (!newsBundle) return [];
+    return analyzeNewsFeed(newsBundle.rawNews).items;
+  }, [newsBundle]);
+
+  const upcomingRedEventCount = useMemo(() => {
+    if (!newsBundle) return 0;
+    const now = Date.now();
+    return newsBundle.calendar.filter(
+      (ev) => ev.impact === 'High' && ev.timestampMs > now,
+    ).length;
+  }, [newsBundle]);
+
+  const handleOpenNewsForCoin = useCallback(() => {
+    setNewsInitialFilter('SELECTED_COIN');
+    setActiveTab('news');
+  }, []);
+
   const handleRefresh = useCallback(() => {
     if (activeTab === 'scanner') {
       void handleStartScan();
       return;
     }
+    if (activeTab === 'news') {
+      void loadNews();
+      return;
+    }
     void loadMarketData(selectedSymbol, true);
-  }, [activeTab, handleStartScan, selectedSymbol, loadMarketData]);
+  }, [activeTab, handleStartScan, loadNews, selectedSymbol, loadMarketData]);
 
   const scannerBuyCount = useMemo(
     () => scanResults.filter((r) => r.verdict === 'MUA').length,
@@ -340,12 +398,26 @@ export default function App() {
           activeModeId={settings.activeModeId}
           activeTab={activeTab}
           scannerBuyCount={scannerBuyCount}
-          onSelectTab={setActiveTab}
+          upcomingRedEventCount={upcomingRedEventCount}
+          onSelectTab={(tab) => {
+            if (tab === 'news') setNewsInitialFilter('ALL');
+            setActiveTab(tab);
+          }}
           onSelectMode={handleSelectMode}
           onRefresh={handleRefresh}
           onOpenSettings={() => setSettingsOpen(true)}
-          fetchedAt={marketData?.fetchedAt ?? null}
-          isRefreshing={activeTab === 'scanner' ? isScanning : isRefreshing}
+          fetchedAt={
+            activeTab === 'news'
+              ? (newsBundle?.fetchedAt ?? null)
+              : (marketData?.fetchedAt ?? null)
+          }
+          isRefreshing={
+            activeTab === 'scanner'
+              ? isScanning
+              : activeTab === 'news'
+                ? newsLoading
+                : isRefreshing
+          }
         />
 
         {activeTab === 'detail' ? (
@@ -396,11 +468,16 @@ export default function App() {
                   />
                   <IndicatorMatrix timeframes={report.timeframes} />
                   <BacktestCard result={backtest} modeName={activeMode.name} />
+                  <CoinNewsStrip
+                    selectedSymbol={selectedSymbol}
+                    items={analyzedNews}
+                    onOpenNewsTab={handleOpenNewsForCoin}
+                  />
                 </>
               ) : null}
             </main>
           </>
-        ) : (
+        ) : activeTab === 'scanner' ? (
           <main>
             <MarketScanner
               activeMode={activeMode}
@@ -414,6 +491,22 @@ export default function App() {
               error={scanError}
               onStartScan={() => void handleStartScan()}
               onStopScan={handleStopScan}
+              onSelectCoin={handleSelectCoinFromScanner}
+            />
+          </main>
+        ) : (
+          <main>
+            <NewsFeed
+              key={newsInitialFilter}
+              selectedSymbol={selectedSymbol}
+              items={analyzedNews}
+              calendar={newsBundle?.calendar ?? []}
+              fearGreed={newsBundle?.fearGreed ?? null}
+              fetchedAt={newsBundle?.fetchedAt ?? null}
+              loading={newsLoading}
+              error={newsError}
+              initialFilter={newsInitialFilter}
+              onRefresh={() => void loadNews()}
               onSelectCoin={handleSelectCoinFromScanner}
             />
           </main>
